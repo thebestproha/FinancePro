@@ -33,10 +33,8 @@ function renderAccounts() {
         const isDebt = acc.type === 'Loan' || acc.balance < 0;
         const color = isDebt ? '#ef4444' : '#10b981';
 
-        // CONDITIONAL BUTTONS: Repay for Loans, Deposit/Withdraw for Banks
         let buttonsHtml = '';
         if (acc.type === 'Loan') {
-            // Updated to match the dark theme (#111 background, #333 border)
             buttonsHtml = `<button onclick="showRepayModal('${acc.id}')" class="btn-sm" style="flex: 1; padding: 6px; font-size: 0.8rem; background: #111 !important; border-color: #333 !important; color: white;">🔄 Repay Loan</button>`;
         } else {
             buttonsHtml = `
@@ -279,13 +277,38 @@ function renderTransactions() {
     const tbody = document.querySelector('#transactionsTable tbody'); if (!tbody) return;
     const searchTerm = document.getElementById('searchTransactions')?.value.toLowerCase() || '';
     const filterCat = document.getElementById('filterCategory')?.value || '';
+    const typeFilter = document.getElementById('transactionTypeFilter')?.value || '';
+    const sortBy = document.getElementById('transactionSortBy')?.value || 'date';
+    const sortDirection = document.getElementById('transactionSortDirection')?.value || 'desc';
+    const groupBy = document.getElementById('transactionGroupBy')?.value || '';
     tbody.innerHTML = ''; let count = 0;
 
-    (state.transactions || []).filter(t => {
+    const filteredTransactions = (state.transactions || []).filter(t => {
         const matchesSearch = !searchTerm || (t.notes && t.notes.toLowerCase().includes(searchTerm)) || t.category.toLowerCase().includes(searchTerm);
-        return matchesSearch && (!filterCat || t.category === filterCat);
-    }).forEach(t => {
-        // Find Account Name if linked
+        return matchesSearch && (!filterCat || t.category === filterCat) && (!typeFilter || t.type === typeFilter);
+    });
+
+    const sortedTransactions = typeof getSortedTransactions === 'function'
+        ? getSortedTransactions({ sortBy, sortDirection, typeFilter })
+        : [...filteredTransactions].sort((left, right) => new Date(right.date) - new Date(left.date));
+
+    const visibleTransactions = sortedTransactions.filter(t => {
+        const matchesSearch = !searchTerm || (t.notes && t.notes.toLowerCase().includes(searchTerm)) || t.category.toLowerCase().includes(searchTerm);
+        return matchesSearch && (!filterCat || t.category === filterCat) && (!typeFilter || t.type === typeFilter);
+    });
+
+    const grouped = groupBy ? visibleTransactions.reduce((groups, transaction) => {
+        let key = 'Other';
+        if (groupBy === 'type') key = transaction.type || 'Other';
+        else if (groupBy === 'day') key = transaction.date || 'Unknown';
+        else if (groupBy === 'month') key = transaction.date ? transaction.date.slice(0, 7) : 'Unknown';
+        else if (groupBy === 'account') key = transaction.accountId || 'Unlinked';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(transaction);
+        return groups;
+    }, {}) : null;
+
+    const renderTransactionRow = (t, label = '') => {
         let accName = '-';
         if (t.accountId) {
             const acc = state.accounts.find(a => a.id === t.accountId);
@@ -296,8 +319,8 @@ function renderTransactions() {
         const row = tbody.insertRow();
         row.innerHTML = `
             <td>${new Date(t.date).toLocaleDateString('en-IN')}</td>
-            <td>${t.category}<br><small style="color:var(--text-muted)">${accName}</small></td>
-            <td style="color: ${t.type === 'income' ? 'var(--success)' : (t.type === 'transfer' ? '#3b82f6' : 'var(--danger)')}; font-weight: 600;">₹${t.amount.toLocaleString()}</td>
+            <td>${t.category}${label ? `<br><small style="color:var(--text-muted)">${label}</small>` : ''}<br><small style="color:var(--text-muted)">${accName}</small></td>
+            <td style="color: ${t.type === 'income' ? 'var(--success)' : (t.type === 'transfer' ? '#3b82f6' : 'var(--danger)')}; font-weight: 600;">₹${Number(t.amount || 0).toLocaleString()}</td>
             <td>${t.type === 'income' ? '➕ In' : (t.type === 'transfer' ? '🔄 Swap' : '➖ Out')}</td>
             <td>${t.notes || '-'}</td>
             <td>
@@ -305,7 +328,17 @@ function renderTransactions() {
                 <button onclick="deleteTransaction('${t.id}')" class="btn-sm btn-delete" style="background:#ef4444;color:white;padding:4px 8px;border-radius:4px;font-size:12px;cursor:pointer;">Delete</button>
             </td>`;
         count++;
-    });
+    };
+
+    if (grouped) {
+        Object.entries(grouped).forEach(([label, entries]) => {
+            const headerRow = tbody.insertRow();
+            headerRow.innerHTML = `<td colspan="6" style="background: rgba(255,255,255,0.05); color: var(--text-main); font-weight: 700;">${groupBy.toUpperCase()}: ${label}</td>`;
+            entries.forEach(transaction => renderTransactionRow(transaction, `${groupBy}: ${label}`));
+        });
+    } else {
+        visibleTransactions.forEach(transaction => renderTransactionRow(transaction));
+    }
 
     const countEl = document.getElementById('transactionCount');
     if (countEl) countEl.textContent = `${count} transactions`;
@@ -355,7 +388,7 @@ function saveTransaction() {
     const category = document.getElementById('transactionCategory').value;
     const amount = Number(document.getElementById('transactionAmount').value);
     const type = document.getElementById('transactionType').value;
-    const notes = document.getElementById('transactionNotes').value;
+    if (!name) return alert('Please enter a valid asset name.');
     const accountId = document.getElementById('modalTransactionAccount').value;
 
     if (amount <= 0 || !category) return alert('Please fill all fields');
@@ -388,7 +421,15 @@ function saveTransaction() {
     }
 
     closeTransactionModal(); saveState(); renderAll(); syncDashboard();
-}
+        value: valuation,
+        grams: category === 'Gold' ? grams : 0,
+        age,
+        mileage,
+        condition,
+        location,
+        valuationSource,
+        valuationNote,
+        updatedAt: new Date().toISOString()
 
 function updateFilterCategories() {
     const select = document.getElementById('filterCategory'); if (!select) return;
@@ -408,20 +449,51 @@ function addCustomAsset(type) {
     const category = document.getElementById(`${type}Category`).value;
     const name = document.getElementById(`${type}Name`).value;
     const value = Number(document.getElementById(`${type}Value`).value);
+    const grams = Number(document.getElementById(`${type}GoldGrams`)?.value || 0);
+    const age = Number(document.getElementById(`${type}Age`)?.value || 0);
+    const mileage = Number(document.getElementById(`${type}Mileage`)?.value || 0);
+    const condition = document.getElementById(`${type}Condition`)?.value || 'good';
+    const location = document.getElementById(`${type}Location`)?.value || '';
 
-    if (!name || value <= 0) return alert('Please enter a valid asset name and positive value.');
+    if (!name) return alert('Please enter a valid asset name.');
 
     // THE FIX: Create the array on the fly if it doesn't exist in memory yet
     if (!state.customAssets) {
         state.customAssets = [];
     }
 
+    let valuation = value;
+    let valuationSource = 'Manual value';
+    let valuationNote = '';
+
+    if (category === 'Gold') {
+        if (grams <= 0) return alert('Enter gold grams for gold assets.');
+        valuation = Math.round(grams * 6500);
+        valuationSource = 'Gold spot estimate';
+        valuationNote = `${grams}g × estimated spot rate`;
+    } else if (category === 'Vehicle') {
+        const estimatedVehicleValue = Number(value || 0) > 0 ? Number(value) : Math.max(0, Math.round((Number(value || 0) || 500000) * (1 - Math.min(0.65, (age * 0.1) + (mileage / 200000) + (condition === 'fair' ? 0.08 : condition === 'excellent' ? -0.03 : 0)))));
+        valuation = estimatedVehicleValue;
+        valuationSource = 'Vehicle market estimate';
+        valuationNote = `Age: ${age || 0}y | Mileage: ${mileage || 0} km | Condition: ${condition}`;
+    }
+
+    if (valuation <= 0) return alert('Please enter a valid asset value.');
+
     state.customAssets.push({
         id: 'asset_' + Date.now(),
         type: type, // 'movable' or 'immovable'
         category: category,
         name: name,
-        value: value
+        value: valuation,
+        grams: category === 'Gold' ? grams : 0,
+        age,
+        mileage,
+        condition,
+        location,
+        valuationSource,
+        valuationNote,
+        updatedAt: new Date().toISOString()
     });
 
     // Clear the inputs
@@ -448,10 +520,11 @@ function renderCustomAssets() {
             <div style="display: flex; justify-content: space-between; align-items: center; background: #111; padding: 12px 16px; border-radius: 10px; border: 1px solid #333;">
                 <div>
                     <h4 style="margin: 0; font-size: 0.95rem; color: #fff;">${asset.name}</h4>
-                    <small style="color: var(--text-muted);">${asset.category}</small>
+                    <small style="color: var(--text-muted);">${asset.category}${asset.location ? ` • ${asset.location}` : ''}</small><br>
+                    <small style="color: #60a5fa;">${asset.valuationSource || 'Manual value'}${asset.valuationNote ? ` • ${asset.valuationNote}` : ''}</small>
                 </div>
                 <div style="text-align: right; display: flex; align-items: center; gap: 12px;">
-                    <span style="color: var(--success); font-weight: 600;">₹${asset.value.toLocaleString()}</span>
+                    <span style="color: var(--success); font-weight: 600;">₹${Number(asset.value || 0).toLocaleString()}${asset.category === 'Gold' && asset.grams ? ` • ${asset.grams}g` : ''}</span>
                     <button onclick="showSellCustomAssetModal('${asset.id}')" style="background: transparent; color: var(--danger); border: none; padding: 0; cursor: pointer; font-size: 1.2rem; box-shadow: none;">&times;</button>
                 </div>
             </div>
@@ -469,7 +542,7 @@ function showSellCustomAssetModal(id) {
 
     document.getElementById('sellCustomId').value = id;
     document.getElementById('sellCustomTitle').innerText = `Sell: ${asset.name}`;
-    document.getElementById('sellCustomDetails').innerText = `Current Valuation: ₹${asset.value.toLocaleString()}`;
+    document.getElementById('sellCustomDetails').innerText = `Current Valuation: ₹${Number(asset.value || 0).toLocaleString()}${asset.category === 'Gold' && asset.grams ? ` | Gold: ${asset.grams}g` : ''}${asset.location ? ` | ${asset.location}` : ''}`;
     document.getElementById('sellCustomPrice').value = asset.value; // Pre-fill with estimated value
 
     // Populate bank accounts (hide Loan accounts)
@@ -556,6 +629,9 @@ function addLoan(type) {
     // Mathematical Calculation: Simple Interest (A = P + (P*R*T/100))
     const interestAmount = (principal * rate * time) / 100;
     const finalAmount = principal + interestAmount;
+    const loanSummary = typeof summarizeLoanInsights === 'function'
+        ? summarizeLoanInsights(principal, rate, time, finalAmount)
+        : { emi: 0, totalInterest: interestAmount, totalPayment: finalAmount, advice: '', riskLabel: 'Moderate', overpaySuggestion: 0, schedule: [] };
 
     let linkedAccountId = null;
 
@@ -584,7 +660,14 @@ function addLoan(type) {
         rate: rate,
         time: time,
         finalAmount: finalAmount,
-        accountId: linkedAccountId
+        accountId: linkedAccountId,
+        emi: loanSummary.emi,
+        totalInterest: loanSummary.totalInterest,
+        totalPayment: loanSummary.totalPayment,
+        advice: loanSummary.advice,
+        riskLabel: loanSummary.riskLabel,
+        overpaySuggestion: loanSummary.overpaySuggestion,
+        schedule: loanSummary.schedule
     });
 
     // Clear Inputs
@@ -624,6 +707,8 @@ function renderLoans() {
                 <div>
                     <h4 style="margin: 0; font-size: 0.95rem; color: #fff;">${loan.name}</h4>
                     <small style="color: var(--text-muted);">${loan.purpose} • ${loan.rate}% for ${loan.time}yr</small>
+                    <br>
+                    <small style="color: #60a5fa;">EMI: ₹${Number(loan.emi || 0).toLocaleString()} • ${loan.riskLabel || 'Moderate'}${loan.advice ? ` • ${loan.advice}` : ''}</small>
                     <br>
                     ${actionButton}
                 </div>
@@ -792,6 +877,7 @@ function renderInvestments() {
         tbody.innerHTML += `<tr>
             <td><strong>${asset.ticker}</strong><br><small style="color:var(--text-muted)">🏦 ${bankName}</small></td>
             <td>${asset.qty}</td><td>₹${asset.buyPrice.toLocaleString()}</td><td>₹${asset.currentPrice.toLocaleString()}</td>
+            <td><small style="color:var(--text-muted)">${asset.priceSource || 'Manual'}${asset.priceUpdatedAt ? `<br>${new Date(asset.priceUpdatedAt).toLocaleString()}` : ''}</small></td>
             <td style="color: ${pnl >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: bold;">₹${pnl.toLocaleString()} (${pnl >= 0 ? '+' : ''}${pnlPercent}%)</td>
             <td>
                 <button onclick="updateAssetPrice('${asset.id}')" style="background:#4f7cff; padding:4px 8px; font-size:12px; border-radius:4px; color:white; border:none; margin-right:4px;">Update</button>
@@ -812,7 +898,12 @@ function renderInvestments() {
 function updateAssetPrice(id) {
     const asset = state.investments.find(a => a.id === id); if (!asset) return;
     const newPrice = prompt(`Update current market price for ${asset.ticker} (₹):`, asset.currentPrice);
-    if (newPrice) { asset.currentPrice = Number(newPrice); saveState(); renderInvestments(); calculateNetWorth(); }
+    if (newPrice) {
+        asset.currentPrice = Number(newPrice);
+        asset.priceSource = 'Manual update';
+        asset.priceUpdatedAt = new Date().toISOString();
+        saveState(); renderInvestments(); calculateNetWorth();
+    }
 }
 
 function sellAsset(id) {

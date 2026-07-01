@@ -1,6 +1,100 @@
 const STORAGE_KEY = 'personal_finance_dashboard_state';
 const SAVINGS_GOAL_RATIO = 30;
 
+const DATA_SOURCE_KEY = 'financeproDataSource';
+const DEFAULT_DATA_SOURCE = 'local';
+const SUPABASE_URL_KEY = 'financeproSupabaseUrl';
+const SUPABASE_ANON_KEY = 'financeproSupabaseAnonKey';
+const SUPABASE_SESSION_KEY = 'financeproSupabaseSession';
+const DEFAULT_SUPABASE_URL = 'https://acfecydsjxbctldchvlc.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjZmVjeWRzanhiY3RsZGNodmxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MDUyMjUsImV4cCI6MjA5ODQ4MTIyNX0.VNPWBj1anT9tttz0RV88fmZfCnuIQqFHXLAkgGIgeZ8';
+
+function getSupabaseConfig() {
+    const existingUrl = localStorage.getItem(SUPABASE_URL_KEY);
+    const existingAnonKey = localStorage.getItem(SUPABASE_ANON_KEY);
+
+    if (!existingUrl) localStorage.setItem(SUPABASE_URL_KEY, DEFAULT_SUPABASE_URL);
+    if (!existingAnonKey) localStorage.setItem(SUPABASE_ANON_KEY, DEFAULT_SUPABASE_ANON_KEY);
+
+    return {
+        url: localStorage.getItem(SUPABASE_URL_KEY) || DEFAULT_SUPABASE_URL,
+        anonKey: localStorage.getItem(SUPABASE_ANON_KEY) || DEFAULT_SUPABASE_ANON_KEY
+    };
+}
+
+function getDataSource() {
+    const savedSource = localStorage.getItem(DATA_SOURCE_KEY);
+    if (savedSource === 'supabase') return 'supabase';
+    if (savedSource === 'local') return 'local';
+
+    const { url, anonKey } = getSupabaseConfig();
+    return url && anonKey ? 'supabase' : DEFAULT_DATA_SOURCE;
+}
+
+function setDataSource(source) {
+    localStorage.setItem(DATA_SOURCE_KEY, source === 'supabase' ? 'supabase' : 'local');
+}
+
+function setSupabaseConfig(config = {}) {
+    if (config.url) localStorage.setItem(SUPABASE_URL_KEY, config.url);
+    if (config.anonKey) localStorage.setItem(SUPABASE_ANON_KEY, config.anonKey);
+}
+
+async function syncStateToCloud() {
+    if (getDataSource() !== 'supabase') return false;
+    const { url, anonKey } = getSupabaseConfig();
+    if (!url || !anonKey) return false;
+
+    const payload = {
+        state,
+        updatedAt: new Date().toISOString()
+    };
+
+    try {
+        const response = await fetch(`${url.replace(/\/$/, '')}/rest/v1/finance_profiles`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': anonKey,
+                'Authorization': `Bearer ${anonKey}`,
+                'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        return response.ok;
+    } catch (error) {
+        console.error('Cloud sync failed', error);
+        return false;
+    }
+}
+
+async function loadStateFromCloud() {
+    if (getDataSource() !== 'supabase') return false;
+    const { url, anonKey } = getSupabaseConfig();
+    if (!url || !anonKey) return false;
+
+    try {
+        const response = await fetch(`${url.replace(/\/$/, '')}/rest/v1/finance_profiles?select=state&order=updatedAt.desc&limit=1`, {
+            headers: {
+                'apikey': anonKey,
+                'Authorization': `Bearer ${anonKey}`
+            }
+        });
+
+        if (!response.ok) return false;
+        const rows = await response.json();
+        const record = rows && rows[0];
+        if (!record || !record.state) return false;
+
+        state = normalizeImportedState ? normalizeImportedState(record.state) : { ...getDefaultState(), ...record.state };
+        return true;
+    } catch (error) {
+        console.error('Cloud load failed', error);
+        return false;
+    }
+}
+
 function getDefaultState() {
     return {
         income: 0, budget: 0, expenseEntries: [], transactions: [],
@@ -23,6 +117,9 @@ function loadState() {
 
 function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (getDataSource() === 'supabase') {
+        syncStateToCloud();
+    }
 }
 
 function setInlineError(elementId, message) {
@@ -40,6 +137,78 @@ function getCalculatedIncome() {
 
 function getTransactions() {
     return state.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function getSortedTransactions(options = {}) {
+    const {
+        sortBy = 'date',
+        sortDirection = 'desc',
+        typeFilter = '',
+        groupBy = ''
+    } = options;
+
+    const normalizedDirection = sortDirection === 'asc' ? 1 : -1;
+
+    const filtered = (state.transactions || []).filter((transaction) => {
+        if (typeFilter && transaction.type !== typeFilter) return false;
+        return true;
+    });
+
+    const sorted = [...filtered].sort((left, right) => {
+        if (sortBy === 'amount') {
+            return (Number(left.amount || 0) - Number(right.amount || 0)) * normalizedDirection;
+        }
+
+        if (sortBy === 'type') {
+            return String(left.type || '').localeCompare(String(right.type || '')) * normalizedDirection;
+        }
+
+        if (sortBy === 'category') {
+            return String(left.category || '').localeCompare(String(right.category || '')) * normalizedDirection;
+        }
+
+        if (sortBy === 'account') {
+            return String(left.accountId || '').localeCompare(String(right.accountId || '')) * normalizedDirection;
+        }
+
+        return (new Date(left.date).getTime() - new Date(right.date).getTime()) * normalizedDirection;
+    });
+
+    if (!groupBy) return sorted;
+
+    return sorted.reduce((groups, transaction) => {
+        let groupKey = 'Other';
+        if (groupBy === 'type') groupKey = transaction.type || 'Other';
+        else if (groupBy === 'day') groupKey = transaction.date || 'Unknown';
+        else if (groupBy === 'month') groupKey = transaction.date ? transaction.date.slice(0, 7) : 'Unknown';
+        else if (groupBy === 'account') groupKey = transaction.accountId || 'Unlinked';
+
+        if (!groups[groupKey]) groups[groupKey] = [];
+        groups[groupKey].push(transaction);
+        return groups;
+    }, {});
+}
+
+function normalizeImportedState(payload) {
+    const safe = (payload && typeof payload === 'object') ? payload : {};
+    return {
+        ...getDefaultState(),
+        ...safe,
+        budget: Number(safe.budget || 0),
+        income: Number(safe.income || 0),
+        transactions: Array.isArray(safe.transactions) ? safe.transactions : [],
+        goals: Array.isArray(safe.goals) ? safe.goals : [],
+        investments: Array.isArray(safe.investments) ? safe.investments : [],
+        subscriptions: Array.isArray(safe.subscriptions) ? safe.subscriptions : [],
+        netWorthHistory: Array.isArray(safe.netWorthHistory) ? safe.netWorthHistory : [],
+        recurring: Array.isArray(safe.recurring) ? safe.recurring : [],
+        expenseEntries: Array.isArray(safe.expenseEntries) ? safe.expenseEntries : [],
+        accounts: Array.isArray(safe.accounts) ? safe.accounts : [],
+        customAssets: Array.isArray(safe.customAssets) ? safe.customAssets : [],
+        customLoans: Array.isArray(safe.customLoans) ? safe.customLoans : [],
+        categoryBudgets: (safe.categoryBudgets && typeof safe.categoryBudgets === 'object') ? safe.categoryBudgets : {},
+        theme: safe.theme === 'dark' ? 'dark' : 'light'
+    };
 }
 
 function getExpensesByCategory() {

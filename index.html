@@ -202,6 +202,30 @@
                             <select id="filterCategory">
                                 <option value="">All Categories</option>
                             </select>
+                            <select id="transactionTypeFilter">
+                                <option value="">All Types</option>
+                                <option value="income">Income</option>
+                                <option value="expense">Expense</option>
+                                <option value="transfer">Transfer</option>
+                            </select>
+                            <select id="transactionSortBy">
+                                <option value="date">Sort by Date</option>
+                                <option value="amount">Sort by Amount</option>
+                                <option value="type">Sort by Type</option>
+                                <option value="category">Sort by Category</option>
+                                <option value="account">Sort by Account</option>
+                            </select>
+                            <select id="transactionSortDirection">
+                                <option value="desc">Descending</option>
+                                <option value="asc">Ascending</option>
+                            </select>
+                            <select id="transactionGroupBy">
+                                <option value="">No Grouping</option>
+                                <option value="type">Group by Type</option>
+                                <option value="day">Group by Day</option>
+                                <option value="month">Group by Month</option>
+                                <option value="account">Group by Account</option>
+                            </select>
                             <button onclick="exportCSV()">📤 Export</button>
                             <button onclick="importCSV()" class="secondary"
                                 style="background:transparent; border:1px solid var(--glass-border);">📥 Import</button>
@@ -297,13 +321,22 @@
                             <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
                                 <select id="movableCategory">
                                     <option value="Vehicle">Vehicle</option>
+                                    <option value="Gold">Gold</option>
                                     <option value="Jewellery">Jewellery</option>
                                     <option value="Electronics">Electronics</option>
                                     <option value="Collectibles">Art / Collectibles</option>
                                     <option value="Other">Other</option>
                                 </select>
-                                <input type="text" id="movableName" placeholder="Asset Name (e.g., Honda City)">
-                                <input type="number" id="movableValue" placeholder="Current Value (₹)">
+                                <input type="text" id="movableName" placeholder="Asset Name (e.g., Honda City or 22K Gold)">
+                                <input type="number" id="movableGoldGrams" placeholder="Gold Grams (only for Gold)">
+                                <input type="number" id="movableValue" placeholder="Current Value / Base Price (₹)">
+                                <input type="number" id="movableAge" placeholder="Vehicle Age (years, optional)">
+                                <input type="number" id="movableMileage" placeholder="Mileage (km, optional)">
+                                <select id="movableCondition">
+                                    <option value="good">Vehicle Condition: Good</option>
+                                    <option value="excellent">Vehicle Condition: Excellent</option>
+                                    <option value="fair">Vehicle Condition: Fair</option>
+                                </select>
                                 <button onclick="addCustomAsset('movable')"
                                     style="background: #10b981; margin-top: 5px;">+ Add Movable Asset</button>
                             </div>
@@ -324,6 +357,7 @@
                                 </select>
                                 <input type="text" id="immovableName" placeholder="Asset Name (e.g., Ancestral Home)">
                                 <input type="number" id="immovableValue" placeholder="Current Value (₹)">
+                                <input type="text" id="immovableLocation" placeholder="Location / Area (optional)">
                                 <button onclick="addCustomAsset('immovable')"
                                     style="background: #3b82f6; margin-top: 5px;">+ Add Immovable Asset</button>
                             </div>
@@ -352,6 +386,7 @@
                                     <input type="number" id="bankLoanTime" placeholder="Time (Years)"
                                         style="width: 50%;">
                                 </div>
+                                <p id="bankLoanPreview" style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Loan schedule and repayment suggestions will appear after saving.</p>
                                 <button onclick="addLoan('bank')" style="background: #ef4444; margin-top: 5px;">+ Add
                                     Bank Loan</button>
                             </div>
@@ -375,6 +410,7 @@
                                     <input type="number" id="otherLoanTime" placeholder="Time (Years)"
                                         style="width: 50%;">
                                 </div>
+                                <p id="otherLoanPreview" style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">We’ll calculate EMI, total interest, and repayment guidance automatically.</p>
                                 <button onclick="addLoan('other')" style="background: #f97316; margin-top: 5px;">+ Add
                                     Other Loan</button>
                             </div>
@@ -419,6 +455,7 @@
                                     <th>Qty</th>
                                     <th>Avg Price</th>
                                     <th>Current Price</th>
+                                    <th>Market Source</th>
                                     <th>P&L</th>
                                     <th>Actions</th>
                                 </tr>
@@ -603,6 +640,7 @@
                 <input type="text" id="invTicker" placeholder="Asset Name (e.g., NIFTY50, Gold)">
                 <input type="number" id="invQty" placeholder="Quantity">
                 <input type="number" id="invPrice" placeholder="Buy Price Per Unit (₹)">
+                <p id="investmentHint" style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Gold positions can be tracked using grams and refreshed to spot value later.</p>
                 <label style="font-size: 0.9rem; color: var(--text-muted);">Pay from Bank Account:</label>
                 <select class="account-dropdown" id="invAccount"></select>
                 <div class="modal-buttons"><button onclick="saveInvestment()">Buy Asset</button></div>

@@ -42,6 +42,50 @@ function populateDropdowns() {
     document.querySelectorAll('#transactionCategory, #category').forEach(select => { if (select) select.innerHTML = optionsHTML; });
 }
 
+function setupAssetFieldVisibility() {
+    const movableCategory = document.getElementById('movableCategory');
+    if (!movableCategory) return;
+
+    const goldGrams = document.getElementById('movableGoldGrams');
+    const movableValue = document.getElementById('movableValue');
+    const movableAge = document.getElementById('movableAge');
+    const movableMileage = document.getElementById('movableMileage');
+    const movableCondition = document.getElementById('movableCondition');
+    const movableHint = document.getElementById('movableAssetHint');
+
+    const syncFields = () => {
+        const isGold = movableCategory.value === 'Gold';
+        const isVehicle = movableCategory.value === 'Vehicle';
+
+        if (goldGrams) goldGrams.style.display = isGold ? 'block' : 'none';
+        if (movableValue) {
+            movableValue.style.display = isGold ? 'none' : 'block';
+            movableValue.placeholder = isVehicle ? 'Base Price / Market Value (₹)' : 'Current Value (₹)';
+        }
+        if (movableAge) movableAge.style.display = isVehicle ? 'block' : 'none';
+        if (movableMileage) movableMileage.style.display = isVehicle ? 'block' : 'none';
+        if (movableCondition) movableCondition.style.display = isVehicle ? 'block' : 'none';
+        if (movableHint) {
+            movableHint.innerText = isGold
+                ? 'Enter gold in grams. We will derive the value from current spot price.'
+                : isVehicle
+                    ? 'Enter vehicle age, mileage, and condition for a current market estimate.'
+                    : 'Enter a manual value for this asset.';
+        }
+    };
+
+    movableCategory.addEventListener('change', syncFields);
+    syncFields();
+}
+
+function setupSupabaseBridge() {
+    const dataSource = getDataSource();
+    if (dataSource !== 'supabase') return;
+    const { url, anonKey } = getSupabaseConfig();
+    if (!url || !anonKey) return;
+    setTimeout(() => loadStateFromCloud && loadStateFromCloud(), 0);
+}
+
 function renderAll() {
     updateDashboardCards(); renderTransactions(); renderGoals(); renderInvestments(); renderSubscriptions(); renderExpenseBreakdown();
     if (summaryChart) updateSummaryChart();
@@ -189,6 +233,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
     document.getElementById('searchTransactions')?.addEventListener('input', renderTransactions);
     document.getElementById('filterCategory')?.addEventListener('change', renderTransactions);
+    document.getElementById('transactionTypeFilter')?.addEventListener('change', renderTransactions);
+    document.getElementById('transactionSortBy')?.addEventListener('change', renderTransactions);
+    document.getElementById('transactionSortDirection')?.addEventListener('change', renderTransactions);
+    document.getElementById('transactionGroupBy')?.addEventListener('change', renderTransactions);
+    setupAssetFieldVisibility();
+    setupSupabaseBridge();
     init3DInteractions();
     initHeaderOnScroll();
     initButtonRipples();

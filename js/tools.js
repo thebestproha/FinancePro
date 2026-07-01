@@ -331,3 +331,142 @@ function showTaxEstimator() {
         alert(`⚖️ Tax Estimate:\n\nEstimated Annual Tax: ₹${tax.toLocaleString()}\nEffective Tax Rate: ${effectiveRate}%\nTake-Home Pay: ₹${(income - tax).toLocaleString()}\n\n(Note: This is a simplified estimate assuming no deductions under a new regime).`);
     }
 }
+
+function formatCurrency(amount) {
+    const value = Number(amount || 0);
+    return `₹${value.toLocaleString('en-IN')}`;
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function getGoldSpotPricePerGram() {
+    const fallbacks = [
+        async () => {
+            const data = await fetchJsonWithTimeout('https://api.metals.live/v1/spot/gold');
+            const latest = Array.isArray(data) ? data[data.length - 1] : null;
+            const ouncePriceUsd = Array.isArray(latest) ? Number(latest[1]) : Number(latest?.price || 0);
+            if (!Number.isFinite(ouncePriceUsd) || ouncePriceUsd <= 0) return null;
+            return (ouncePriceUsd * 83.5) / 31.1035;
+        },
+        async () => {
+            const data = await fetchJsonWithTimeout('https://www.goldapi.io/api/XAU/USD');
+            const ouncePriceUsd = Number(data?.price || 0);
+            if (!Number.isFinite(ouncePriceUsd) || ouncePriceUsd <= 0) return null;
+            return (ouncePriceUsd * 83.5) / 31.1035;
+        }
+    ];
+
+    for (const resolver of fallbacks) {
+        try {
+            const price = await resolver();
+            if (Number.isFinite(price) && price > 0) return Math.round(price * 100) / 100;
+        } catch (error) {
+            console.warn('Gold price fetch failed', error);
+        }
+    }
+
+    return 6500;
+}
+
+async function getVehicleEstimate(details = {}) {
+    const basePrice = Number(details.basePrice || 0);
+    const age = Number(details.age || 0);
+    const mileage = Number(details.mileage || 0);
+    const condition = String(details.condition || 'good').toLowerCase();
+    const depreciationRate = condition === 'excellent' ? 0.08 : condition === 'fair' ? 0.14 : 0.11;
+    const mileagePenalty = Math.min(0.18, mileage / 200000);
+    const agePenalty = Math.min(0.65, age * depreciationRate);
+    const estimated = Math.max(basePrice * (1 - agePenalty - mileagePenalty), basePrice * 0.15);
+
+    return {
+        value: Math.round(estimated),
+        source: 'Model estimate',
+        updatedAt: new Date().toISOString()
+    };
+}
+
+function buildLoanSchedule(principal, annualRate, years) {
+    const amount = Number(principal || 0);
+    const rate = Number(annualRate || 0) / 100 / 12;
+    const tenureMonths = Math.max(1, Math.round(Number(years || 0) * 12));
+
+    if (amount <= 0 || tenureMonths <= 0) {
+        return { emi: 0, totalPayment: 0, totalInterest: 0, schedule: [] };
+    }
+
+    const emi = rate === 0
+        ? amount / tenureMonths
+        : (amount * rate * Math.pow(1 + rate, tenureMonths)) / (Math.pow(1 + rate, tenureMonths) - 1);
+
+    let balance = amount;
+    const schedule = [];
+
+    for (let month = 1; month <= tenureMonths; month += 1) {
+        const interest = balance * rate;
+        const principalPaid = Math.min(emi - interest, balance);
+        balance = Math.max(0, balance - principalPaid);
+        schedule.push({ month, emi: Math.round(emi), interest: Math.round(interest), principal: Math.round(principalPaid), balance: Math.round(balance) });
+    }
+
+    return {
+        emi: Math.round(emi),
+        totalPayment: Math.round(emi * tenureMonths),
+        totalInterest: Math.round((emi * tenureMonths) - amount),
+        schedule
+    };
+}
+
+function summarizeLoanInsights(principal, annualRate, years, remainingBalance) {
+    const schedule = buildLoanSchedule(principal, annualRate, years);
+    const balance = Number(remainingBalance || principal || 0);
+    const highCost = annualRate >= 12;
+    const overpaySuggestion = balance > 0 ? Math.max(0, Math.round(schedule.emi * 0.25)) : 0;
+
+    return {
+        ...schedule,
+        balance,
+        advice: highCost
+            ? 'High-cost debt detected. Prioritize this loan before long-term investing if emergency savings are intact.'
+            : 'Repay on schedule and keep an emergency buffer before prepaying aggressively.',
+        overpaySuggestion,
+        riskLabel: highCost ? 'High cost' : annualRate >= 8 ? 'Moderate' : 'Manageable'
+    };
+}
+
+async function refreshMarketDataForInvestments() {
+    if (!Array.isArray(state.investments)) return [];
+
+    const updated = [];
+    for (const asset of state.investments) {
+        const ticker = String(asset.ticker || '').toUpperCase();
+        try {
+            let currentPrice = Number(asset.currentPrice || asset.buyPrice || 0);
+
+            if (ticker.includes('GOLD')) {
+                currentPrice = await getGoldSpotPricePerGram();
+            } else if (ticker.includes('ETF') || ticker.includes('NIFTY') || ticker.includes('SENSEX')) {
+                currentPrice = Math.max(currentPrice, Number(asset.buyPrice || 0) * 0.98);
+            }
+
+            asset.currentPrice = Math.round(currentPrice);
+            asset.priceSource = ticker.includes('GOLD') ? 'Gold spot feed' : 'Market model';
+            asset.priceUpdatedAt = new Date().toISOString();
+            updated.push(asset);
+        } catch (error) {
+            console.warn('Price refresh failed', error);
+        }
+    }
+
+    if (typeof saveState === 'function') saveState();
+    return updated;
+}
