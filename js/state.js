@@ -41,10 +41,74 @@ function setSupabaseConfig(config = {}) {
     if (config.anonKey) localStorage.setItem(SUPABASE_ANON_KEY, config.anonKey);
 }
 
+function getSupabaseSession() {
+    try {
+        const raw = localStorage.getItem(SUPABASE_SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+        console.error('Failed to read Supabase session', error);
+        return null;
+    }
+}
+
+function setSupabaseSession(session) {
+    if (!session) {
+        localStorage.removeItem(SUPABASE_SESSION_KEY);
+        return;
+    }
+    localStorage.setItem(SUPABASE_SESSION_KEY, JSON.stringify(session));
+}
+
+function getSupabaseAccessToken() {
+    const session = getSupabaseSession();
+    return session?.access_token || '';
+}
+
+async function supabaseAuthRequest(path, method, body) {
+    const { url, anonKey } = getSupabaseConfig();
+    if (!url || !anonKey) throw new Error('Supabase not configured');
+
+    const response = await fetch(`${url.replace(/\/$/, '')}/auth/v1/${path}`, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': anonKey,
+            'Authorization': `Bearer ${anonKey}`
+        },
+        body: body ? JSON.stringify(body) : undefined
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(data?.msg || data?.error_description || data?.message || 'Supabase auth request failed');
+    }
+
+    return data;
+}
+
+async function signInWithSupabase(email, password) {
+    const data = await supabaseAuthRequest('token?grant_type=password', 'POST', { email, password });
+    setSupabaseSession(data);
+    setDataSource('supabase');
+    return data;
+}
+
+async function signUpWithSupabase(email, password) {
+    const data = await supabaseAuthRequest('signup', 'POST', { email, password });
+    return data;
+}
+
+function signOutSupabase() {
+    setSupabaseSession(null);
+    setDataSource('local');
+}
+
 async function syncStateToCloud() {
     if (getDataSource() !== 'supabase') return false;
     const { url, anonKey } = getSupabaseConfig();
     if (!url || !anonKey) return false;
+    const accessToken = getSupabaseAccessToken();
+    if (!accessToken) return false;
 
     const payload = {
         profile_name: 'Main Profile',
@@ -58,7 +122,7 @@ async function syncStateToCloud() {
             headers: {
                 'Content-Type': 'application/json',
                 'apikey': anonKey,
-                'Authorization': `Bearer ${anonKey}`,
+                'Authorization': `Bearer ${accessToken}`,
                 'Prefer': 'resolution=merge-duplicates,return=minimal',
                 'Content-Profile': 'public',
                 'Prefer-Profile': 'public'
@@ -77,12 +141,14 @@ async function loadStateFromCloud() {
     if (getDataSource() !== 'supabase') return false;
     const { url, anonKey } = getSupabaseConfig();
     if (!url || !anonKey) return false;
+    const accessToken = getSupabaseAccessToken();
+    if (!accessToken) return false;
 
     try {
         const response = await fetch(`${url.replace(/\/$/, '')}/rest/v1/${FINANCE_PROFILE_TABLE}?select=state,updated_at&order=updated_at.desc&limit=1`, {
             headers: {
                 'apikey': anonKey,
-                'Authorization': `Bearer ${anonKey}`
+                'Authorization': `Bearer ${accessToken}`
             }
         });
 

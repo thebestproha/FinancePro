@@ -8,6 +8,7 @@ function initializeApp() {
 
     applyTheme();
     renderAll();
+    updateAuthStatus();
 
     registerPWA();
     detectSpendingAnomalies();
@@ -84,6 +85,82 @@ function setupSupabaseBridge() {
     const { url, anonKey } = getSupabaseConfig();
     if (!url || !anonKey) return;
     setTimeout(() => loadStateFromCloud && loadStateFromCloud(), 0);
+}
+
+function updateAuthStatus() {
+    const statusText = document.getElementById('authStatusText');
+    const authActionBtn = document.getElementById('authActionBtn');
+    const session = typeof getSupabaseSession === 'function' ? getSupabaseSession() : null;
+    const dataSource = typeof getDataSource === 'function' ? getDataSource() : 'local';
+
+    if (!statusText || !authActionBtn) return;
+
+    if (session?.user?.email) {
+        statusText.innerText = `Cloud: ${session.user.email}`;
+        authActionBtn.innerText = 'Sign Out';
+        authActionBtn.onclick = handleSupabaseSignOut;
+    } else if (dataSource === 'supabase') {
+        statusText.innerText = 'Cloud ready';
+        authActionBtn.innerText = 'Sign In';
+        authActionBtn.onclick = toggleAuthPanel;
+    } else {
+        statusText.innerText = 'Local mode';
+        authActionBtn.innerText = 'Sign In';
+        authActionBtn.onclick = toggleAuthPanel;
+    }
+}
+
+function toggleAuthPanel() {
+    const panel = document.getElementById('authPanel');
+    if (!panel) return;
+    panel.style.display = panel.style.display === 'none' || !panel.style.display ? 'block' : 'none';
+}
+
+async function handleSupabaseSignIn() {
+    const email = document.getElementById('authEmail')?.value?.trim();
+    const password = document.getElementById('authPassword')?.value || '';
+    const message = document.getElementById('authMessage');
+
+    if (!email || !password) {
+        if (message) message.innerText = 'Enter your email and password.';
+        return;
+    }
+
+    try {
+        const session = await signInWithSupabase(email, password);
+        if (message) message.innerText = session?.user?.email ? `Signed in as ${session.user.email}` : 'Signed in successfully.';
+        const panel = document.getElementById('authPanel');
+        if (panel) panel.style.display = 'none';
+        updateAuthStatus();
+        setupSupabaseBridge();
+        renderAll();
+    } catch (error) {
+        if (message) message.innerText = error.message || 'Sign in failed.';
+    }
+}
+
+async function handleSupabaseSignUp() {
+    const email = document.getElementById('authEmail')?.value?.trim();
+    const password = document.getElementById('authPassword')?.value || '';
+    const message = document.getElementById('authMessage');
+
+    if (!email || !password) {
+        if (message) message.innerText = 'Enter your email and password.';
+        return;
+    }
+
+    try {
+        await signUpWithSupabase(email, password);
+        if (message) message.innerText = 'Account created. Please sign in to continue.';
+    } catch (error) {
+        if (message) message.innerText = error.message || 'Sign up failed.';
+    }
+}
+
+function handleSupabaseSignOut() {
+    if (typeof signOutSupabase === 'function') signOutSupabase();
+    updateAuthStatus();
+    renderAll();
 }
 
 function renderAll() {
@@ -239,6 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('transactionGroupBy')?.addEventListener('change', renderTransactions);
     setupAssetFieldVisibility();
     setupSupabaseBridge();
+    updateAuthStatus();
     init3DInteractions();
     initHeaderOnScroll();
     initButtonRipples();
