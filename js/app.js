@@ -1,5 +1,6 @@
 function initializeApp() {
     populateDropdowns();
+    applySupabaseHashSession();
     loadState();
     initializeChartsLazy();
 
@@ -97,7 +98,7 @@ function updateAuthStatus() {
     if (!statusText || !authActionBtn) return;
 
     if (session?.user?.email) {
-        statusText.innerText = `Cloud: ${session.user.email}`;
+        statusText.innerText = `Signed in: ${session.user.email}`;
         authActionBtn.innerText = 'Sign Out';
         authActionBtn.onclick = handleSupabaseSignOut;
     } else if (dataSource === 'supabase') {
@@ -138,8 +139,8 @@ async function handleSupabaseSignIn() {
         if (message) message.innerText = session?.user?.email ? `Signed in as ${session.user.email}` : 'Signed in successfully.';
         closeAuthModal();
         updateAuthStatus();
-        setupSupabaseBridge();
-        if (typeof refreshPricesAndRender === 'function') await refreshPricesAndRender();
+        await setupSupabaseBridge();
+        await refreshPricesAndRender();
         renderAll();
     } catch (error) {
         if (message) message.innerText = error.message || 'Sign in failed.';
@@ -171,10 +172,13 @@ function handleSupabaseSignOut() {
 }
 
 async function refreshPricesAndRender() {
+    const marketStatus = document.getElementById('marketRefreshStatus');
     if (typeof refreshMarketDataForInvestments === 'function') {
+        if (marketStatus) marketStatus.innerText = 'Refreshing live prices...';
         await refreshMarketDataForInvestments();
     }
     renderInvestments();
+    if (marketStatus) marketStatus.innerText = `Last refreshed: ${new Date().toLocaleTimeString()}`;
 }
 
 function renderAll() {

@@ -64,6 +64,34 @@ function getSupabaseAccessToken() {
     return session?.access_token || '';
 }
 
+function applySupabaseHashSession() {
+    if (!window.location.hash) return false;
+
+    const fragment = window.location.hash.replace(/^#/, '');
+    const params = new URLSearchParams(fragment);
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    const expiresAt = params.get('expires_at');
+    const tokenType = params.get('token_type') || 'bearer';
+
+    if (!accessToken) return false;
+
+    const session = {
+        access_token: accessToken,
+        refresh_token: refreshToken || '',
+        expires_at: expiresAt ? Number(expiresAt) : null,
+        token_type: tokenType,
+        user: {
+            email: params.get('email') || ''
+        }
+    };
+
+    setSupabaseSession(session);
+    setDataSource('supabase');
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    return true;
+}
+
 async function supabaseAuthRequest(path, method, body) {
     const { url, anonKey } = getSupabaseConfig();
     if (!url || !anonKey) throw new Error('Supabase not configured');

@@ -81,8 +81,8 @@
                     </button>
                 </div>
             </header>
-            <div id="authOverlay" class="modal" style="display:none; align-items:center; justify-content:center;">
-                <div class="modal-content" style="max-width: 480px; width: calc(100% - 32px); border-top: 3px solid #3b82f6;">
+            <div id="authOverlay" class="modal" style="display:none; align-items:center; justify-content:center; backdrop-filter: blur(10px);">
+                <div class="modal-content" style="max-width: 480px; width: calc(100% - 32px); border-top: 3px solid #3b82f6; box-shadow: 0 20px 60px rgba(0,0,0,0.35);">
                     <span class="close" onclick="closeAuthModal()">&times;</span>
                     <div style="display:flex; flex-direction:column; gap:10px; margin-bottom: 18px;">
                         <p style="margin:0; color: var(--text-muted); font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase;">FinancePro Account</p>
@@ -92,12 +92,17 @@
                     <div style="display: flex; flex-direction: column; gap: 10px;">
                         <input type="email" id="authEmail" placeholder="Email address" autocomplete="email">
                         <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
+                        <p id="authHint" style="margin: 0; color: var(--text-muted); font-size: 0.82rem;">Use Create Account once, then confirm the email from your inbox before signing in.</p>
                         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                             <button onclick="handleSupabaseSignIn()">Sign In</button>
                             <button onclick="handleSupabaseSignUp()" style="background: transparent; border: 1px solid var(--glass-border);">Create Account</button>
                             <button onclick="handleSupabaseSignOut()" style="background: transparent; border: 1px solid var(--danger); color: var(--danger);">Sign Out</button>
                         </div>
                         <p id="authMessage" style="color: var(--text-muted); font-size: 0.85rem; margin: 0;"></p>
+                    </div>
+                    <div style="margin-top: 16px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; color: var(--text-muted); font-size: 0.8rem; border-top: 1px solid var(--glass-border); padding-top: 12px;">
+                        <span id="marketRefreshStatus">Market prices not refreshed yet</span>
+                        <span>Cloud sync ready</span>
                     </div>
                 </div>
             </div>
