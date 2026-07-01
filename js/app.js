@@ -9,6 +9,7 @@ function initializeApp() {
     applyTheme();
     renderAll();
     updateAuthStatus();
+    refreshPricesAndRender();
 
     registerPWA();
     detectSpendingAnomalies();
@@ -102,18 +103,24 @@ function updateAuthStatus() {
     } else if (dataSource === 'supabase') {
         statusText.innerText = 'Cloud ready';
         authActionBtn.innerText = 'Sign In';
-        authActionBtn.onclick = toggleAuthPanel;
+        authActionBtn.onclick = openAuthModal;
     } else {
         statusText.innerText = 'Local mode';
         authActionBtn.innerText = 'Sign In';
-        authActionBtn.onclick = toggleAuthPanel;
+        authActionBtn.onclick = openAuthModal;
     }
 }
 
-function toggleAuthPanel() {
-    const panel = document.getElementById('authPanel');
+function openAuthModal() {
+    const panel = document.getElementById('authOverlay');
     if (!panel) return;
-    panel.style.display = panel.style.display === 'none' || !panel.style.display ? 'block' : 'none';
+    panel.style.display = 'flex';
+}
+
+function closeAuthModal() {
+    const panel = document.getElementById('authOverlay');
+    if (!panel) return;
+    panel.style.display = 'none';
 }
 
 async function handleSupabaseSignIn() {
@@ -129,10 +136,10 @@ async function handleSupabaseSignIn() {
     try {
         const session = await signInWithSupabase(email, password);
         if (message) message.innerText = session?.user?.email ? `Signed in as ${session.user.email}` : 'Signed in successfully.';
-        const panel = document.getElementById('authPanel');
-        if (panel) panel.style.display = 'none';
+        closeAuthModal();
         updateAuthStatus();
         setupSupabaseBridge();
+        if (typeof refreshPricesAndRender === 'function') await refreshPricesAndRender();
         renderAll();
     } catch (error) {
         if (message) message.innerText = error.message || 'Sign in failed.';
@@ -161,6 +168,13 @@ function handleSupabaseSignOut() {
     if (typeof signOutSupabase === 'function') signOutSupabase();
     updateAuthStatus();
     renderAll();
+}
+
+async function refreshPricesAndRender() {
+    if (typeof refreshMarketDataForInvestments === 'function') {
+        await refreshMarketDataForInvestments();
+    }
+    renderInvestments();
 }
 
 function renderAll() {
@@ -317,6 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupAssetFieldVisibility();
     setupSupabaseBridge();
     updateAuthStatus();
+    refreshPricesAndRender();
     init3DInteractions();
     initHeaderOnScroll();
     initButtonRipples();
