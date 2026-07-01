@@ -42,6 +42,7 @@
                         <span id="authStatusText">Local mode</span>
                         <button id="authActionBtn" type="button" onclick="openAuthModal()" style="background: transparent; border: 1px solid var(--glass-border); padding: 4px 10px; font-size: 0.75rem;">Sign In</button>
                     </div>
+                    <button id="liveRefreshBtn" type="button" onclick="refreshPricesAndRender()" style="background: transparent; border: 1px solid var(--glass-border); padding: 6px 10px; font-size: 0.78rem; white-space: nowrap;">↻ Refresh Prices</button>
 
                     <div class="toggle-section" id="navMenu">
                         <button onclick="importAllData(); closeMenu();" style="background:transparent; border:1px solid var(--glass-border);">📥 Import Data</button>

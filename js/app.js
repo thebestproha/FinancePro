@@ -179,6 +179,7 @@ async function refreshPricesAndRender() {
     }
     renderInvestments();
     if (marketStatus) marketStatus.innerText = `Last refreshed: ${new Date().toLocaleTimeString()}`;
+    if (typeof syncMarketSnapshotToCloud === 'function') await syncMarketSnapshotToCloud();
 }
 
 function renderAll() {

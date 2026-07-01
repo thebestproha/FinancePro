@@ -64,6 +64,34 @@ function getSupabaseAccessToken() {
     return session?.access_token || '';
 }
 
+function buildCloudSections(sourceState = state) {
+    const safeState = normalizeImportedState(sourceState);
+    return {
+        profile_name: 'Main Profile',
+        section_key: 'core',
+        section_data: {
+            income: safeState.income,
+            budget: safeState.budget,
+            theme: safeState.theme,
+            lastReset: safeState.lastReset,
+            categoryBudgets: safeState.categoryBudgets
+        },
+        finance_sections: {
+            transactions: safeState.transactions,
+            accounts: safeState.accounts,
+            investments: safeState.investments,
+            customAssets: safeState.customAssets,
+            customLoans: safeState.customLoans,
+            goals: safeState.goals,
+            subscriptions: safeState.subscriptions,
+            recurring: safeState.recurring,
+            netWorthHistory: safeState.netWorthHistory,
+            expenseEntries: safeState.expenseEntries
+        },
+        updatedAt: new Date().toISOString()
+    };
+}
+
 function applySupabaseHashSession() {
     if (!window.location.hash) return false;
 
@@ -138,11 +166,7 @@ async function syncStateToCloud() {
     const accessToken = getSupabaseAccessToken();
     if (!accessToken) return false;
 
-    const payload = {
-        profile_name: 'Main Profile',
-        state: normalizeImportedState(state),
-        updatedAt: new Date().toISOString()
-    };
+    const payload = buildCloudSections(state);
 
     try {
         const response = await fetch(`${url.replace(/\/$/, '')}/rest/v1/${FINANCE_PROFILE_TABLE}`, {
@@ -189,6 +213,51 @@ async function loadStateFromCloud() {
         return true;
     } catch (error) {
         console.error('Cloud load failed', error);
+        return false;
+    }
+}
+
+async function syncCoreStateSection() {
+    return syncStateToCloud();
+}
+
+async function syncMarketSnapshotToCloud() {
+    if (getDataSource() !== 'supabase') return false;
+    const { url, anonKey } = getSupabaseConfig();
+    if (!url || !anonKey) return false;
+    const accessToken = getSupabaseAccessToken();
+    if (!accessToken) return false;
+
+    const payload = {
+        profile_name: 'Main Profile',
+        section_key: 'market',
+        section_data: {
+            investments: (state.investments || []).map((asset) => ({
+                id: asset.id,
+                ticker: asset.ticker,
+                currentPrice: asset.currentPrice,
+                priceSource: asset.priceSource,
+                priceUpdatedAt: asset.priceUpdatedAt
+            }))
+        },
+        updatedAt: new Date().toISOString()
+    };
+
+    try {
+        const response = await fetch(`${url.replace(/\/$/, '')}/rest/v1/${FINANCE_PROFILE_TABLE}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': anonKey,
+                'Authorization': `Bearer ${accessToken}`,
+                'Prefer': 'resolution=merge-duplicates,return=minimal'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        return response.ok;
+    } catch (error) {
+        console.error('Market sync failed', error);
         return false;
     }
 }
