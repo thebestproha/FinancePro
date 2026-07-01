@@ -29,14 +29,16 @@ Site live on: [Link](https://financepr0.netlify.app/)
 - 📱 **Fully Responsive** across desktop, tablet, and mobile
 - 🚀 **PWA Ready** - installable as a web app
 - 📈 **AI-Powered Insights** detecting spending anomalies
-- ⚡ **Zero Dependencies** on databases—local storage only
+- ⚡ **Cloud-ready** with Supabase persistence and local fallback
+- 🔐 **User-owned data** with row-level security ready schema
+- 📈 **Live price scaffolding** for gold, vehicles, and market assets
 
 ### Innovation & Original Contribution
 - Designed a multi-view finance workflow that connects transactions, accounts, goals, investments, subscriptions, and net worth in one state model.
 - Built custom full-data import flow (JSON) and sample-data loader for end-to-end demo/testing across all sections.
 - Implemented goal funding as real inter-account transfer logic (source account to goal-linked account) instead of isolated counters.
 - Developed a 3D hub navigation concept with smooth loader-to-scene transition for better onboarding experience.
-- Added privacy-first architecture: all user financial data remains local in browser storage by default.
+- Added privacy-first architecture with local fallback and Supabase-backed persistence support.
 
 ---
 
@@ -49,6 +51,7 @@ This repository follows academic and ethical sharing expectations. External reso
 - jsPDF: https://github.com/parallax/jsPDF
 - canvas-confetti: https://github.com/catdad/canvas-confetti
 - Spline Viewer/Web Component: https://docs.spline.design/
+- Supabase: https://supabase.com/
 
 ### Visual/Interaction References
 - 3D scene rendering uses Spline-hosted scene URLs configured in the app.
@@ -183,7 +186,7 @@ Languages: JavaScript (51.9%) | CSS (25.4%) | HTML (22.7%)
 
 ### Prerequisites
 - Modern web browser (Chrome 90+, Firefox 88+, Safari 14+, Edge 90+)
-- No backend required—all data stored locally
+- Optional: Supabase project for cloud sync and user-owned storage
 - Optional: HTTP server for best PWA experience
 
 ### Installation
@@ -215,6 +218,12 @@ python -m http.server 8000
 4. **Track Assets** → Go to "Net Worth Tracker" to add investments
 5. **Create Goals** → Set savings targets in "Savings Goals"
 
+### Supabase Setup
+1. Open the Supabase SQL editor.
+2. Run [supabase/schema.sql](supabase/schema.sql).
+3. Optionally run [supabase/seed.sql](supabase/seed.sql) to preload market prices and loan templates.
+4. Keep the app pointed at the provided Supabase URL and anon key if you want cloud sync enabled.
+
 ---
 
 ## 💻 Usage Guide
@@ -224,6 +233,11 @@ python -m http.server 8000
 - Monitor Financial Health Score
 - Check AI-generated spending insights
 - See expense category breakdown pie chart
+
+### Cloud Mode
+- The app can sync the full finance profile to Supabase when cloud mode is enabled.
+- Local storage remains as fallback for offline or unsupported environments.
+- Database tables are prepared for user-owned finance profiles, market prices, loan templates, and audit logs.
 
 ### Transactions
 - Click **+ Add Expense/Income** button
@@ -301,10 +315,10 @@ const lightUrl = 'https://prod.spline.design/eCOXc8L2lS9PB6Dc/scene.splinecode';
 ## 📱 Data & Privacy
 
 ### Local Storage
-- **All data stored locally** in browser's localStorage
-- **No cloud sync** or server communication
-- **No tracking** or analytics
-- **Complete privacy** — your data never leaves your device
+- **Local fallback** is preserved for offline use and quick testing
+- **Cloud sync** is available through Supabase when configured
+- **No tracking** or analytics are added by this app
+- **Complete privacy** depends on your Supabase rules and auth setup
 
 ### Data Backup
 ```javascript
@@ -333,7 +347,7 @@ location.reload();
 | **PDF Export** | jsPDF 2.5.1 |
 | **3D Elements** | Spline.design Viewer |
 | **Animation** | Canvas Confetti, CSS animations |
-| **State Management** | localStorage (no external DB) |
+| **State Management** | localStorage fallback + Supabase persistence |
 | **Styling** | Glassmorphism design, CSS Grid/Flexbox |
 
 ---

@@ -8,6 +8,7 @@ const SUPABASE_ANON_KEY = 'financeproSupabaseAnonKey';
 const SUPABASE_SESSION_KEY = 'financeproSupabaseSession';
 const DEFAULT_SUPABASE_URL = 'https://acfecydsjxbctldchvlc.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjZmVjeWRzanhiY3RsZGNodmxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MDUyMjUsImV4cCI6MjA5ODQ4MTIyNX0.VNPWBj1anT9tttz0RV88fmZfCnuIQqFHXLAkgGIgeZ8';
+const FINANCE_PROFILE_TABLE = 'finance_profiles';
 
 function getSupabaseConfig() {
     const existingUrl = localStorage.getItem(SUPABASE_URL_KEY);
@@ -46,18 +47,21 @@ async function syncStateToCloud() {
     if (!url || !anonKey) return false;
 
     const payload = {
-        state,
+        profile_name: 'Main Profile',
+        state: normalizeImportedState(state),
         updatedAt: new Date().toISOString()
     };
 
     try {
-        const response = await fetch(`${url.replace(/\/$/, '')}/rest/v1/finance_profiles`, {
+        const response = await fetch(`${url.replace(/\/$/, '')}/rest/v1/${FINANCE_PROFILE_TABLE}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'apikey': anonKey,
                 'Authorization': `Bearer ${anonKey}`,
-                'Prefer': 'resolution=merge-duplicates'
+                'Prefer': 'resolution=merge-duplicates,return=minimal',
+                'Content-Profile': 'public',
+                'Prefer-Profile': 'public'
             },
             body: JSON.stringify(payload)
         });
@@ -75,7 +79,7 @@ async function loadStateFromCloud() {
     if (!url || !anonKey) return false;
 
     try {
-        const response = await fetch(`${url.replace(/\/$/, '')}/rest/v1/finance_profiles?select=state&order=updatedAt.desc&limit=1`, {
+        const response = await fetch(`${url.replace(/\/$/, '')}/rest/v1/${FINANCE_PROFILE_TABLE}?select=state,updated_at&order=updated_at.desc&limit=1`, {
             headers: {
                 'apikey': anonKey,
                 'Authorization': `Bearer ${anonKey}`
